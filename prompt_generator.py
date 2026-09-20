@@ -1,0 +1,1 @@
+"""Module for generating image and video prompts from an idea."""

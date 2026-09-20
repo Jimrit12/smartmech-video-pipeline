@@ -1,0 +1,1 @@
+"""Module for generating video ideas based on the niche and analytics."""

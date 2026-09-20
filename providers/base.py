@@ -1,0 +1,1 @@
+"""Base protocols for TextProvider, ImageProvider, and VideoProvider."""

@@ -1,0 +1,1 @@
+"""Module for generating YouTube metadata and AI disclosure flags."""

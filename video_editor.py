@@ -1,0 +1,1 @@
+"""Module for editing generated media into a final Short using ffmpeg."""

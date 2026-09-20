@@ -1,0 +1,9 @@
+
+output/
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+token.json
+.oauth_cache/
