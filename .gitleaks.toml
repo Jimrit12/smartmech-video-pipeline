@@ -1,0 +1,16 @@
+title = "Smartmech Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlists for harmless documentation and test references"
+paths = [
+    '''\.env\.example$''',
+    '''docs/.*''',
+    '''tests/.*'''
+]
+regexes = [
+    '''your_.*_key_here''',
+    '''dummy_.*'''
+]

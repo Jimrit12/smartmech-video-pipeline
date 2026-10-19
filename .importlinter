@@ -1,0 +1,64 @@
+[importlinter]
+root_package = smartmech
+
+[importlinter:contract:domain-pure]
+name = Domain Layer is Pure
+type = forbidden
+source_modules =
+    smartmech.domain
+forbidden_modules =
+    smartmech.ports
+    smartmech.application
+    smartmech.adapters
+    smartmech.interface
+    smartmech.compose
+
+[importlinter:contract:ports-depend-on-domain-only]
+name = Ports Depend on Domain Only
+type = forbidden
+source_modules =
+    smartmech.ports
+forbidden_modules =
+    smartmech.application
+    smartmech.adapters
+    smartmech.interface
+    smartmech.compose
+
+[importlinter:contract:application-depends-on-domain-and-ports-only]
+name = Application Depends on Domain and Ports Only
+type = forbidden
+source_modules =
+    smartmech.application
+forbidden_modules =
+    smartmech.adapters
+    smartmech.interface
+    smartmech.compose
+
+[importlinter:contract:adapters-depend-on-domain-and-ports-only]
+name = Adapters Depend on Domain and Ports Only
+type = forbidden
+source_modules =
+    smartmech.adapters
+forbidden_modules =
+    smartmech.application
+    smartmech.interface
+    smartmech.compose
+
+[importlinter:contract:adapters-only-imported-by-compose]
+name = Adapters Only Imported by Compose
+type = forbidden
+source_modules =
+    smartmech.domain
+    smartmech.ports
+    smartmech.application
+    smartmech.interface
+forbidden_modules =
+    smartmech.adapters
+
+[importlinter:contract:interface-isolated-from-adapters]
+name = Interface Never Imports Adapters
+type = forbidden
+source_modules =
+    smartmech.interface
+forbidden_modules =
+    smartmech.adapters

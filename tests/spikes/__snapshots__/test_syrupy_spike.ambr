@@ -1,0 +1,4 @@
+# serializer version: 1
+# name: test_syrupy_snapshot_assertion
+  'ffmpeg -y -i input.mp4 -vf subtitles=subs.ass -c:v libx264 output.mp4'
+# ---
