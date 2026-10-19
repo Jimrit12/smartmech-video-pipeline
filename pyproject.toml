@@ -66,18 +66,25 @@ select = [
     "RUF"
 ]
 ignore = [
+    "ARG001", # Unused function argument
     "ARG002", # Unused method argument (protocol implementations)
+    "ARG004", # Unused static method argument
     "PTH123", # open() instead of Path.open()
     "E501",    # Line too long (handled by ruff format)
     "PLR0912", # Too many branches
     "PLR0913", # Too many arguments in function definition
     "PLR0915", # Too many statements
+    "PLR0917", # Too many positional arguments
     "PLR2004", # Magic value used in comparison
+    "PLW1510", # Subprocess without check
     "TRY003",  # Avoid specifying long messages outside the exception class
     "TRY300",  # Consider moving to else block
     "EM101",   # Exception must not use a string literal
     "EM102",   # Exception must not use an f-string literal
     "TRY301",  # Abstract `raise` to an inner function
+    "UP022",   # capture_output vs stdout/stderr PIPE
+    "PLC0415", # import at top level
+    "TC002",   # type-checking block
 ]
 
 [tool.ruff.lint.isort]

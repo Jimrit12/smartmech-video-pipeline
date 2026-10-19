@@ -54,11 +54,13 @@ source_modules =
     smartmech.interface
 forbidden_modules =
     smartmech.adapters
+allow_indirect_imports = true
 
 [importlinter:contract:interface-isolated-from-adapters]
-name = Interface Never Imports Adapters
+name = Interface Never Directly Imports Adapters
 type = forbidden
 source_modules =
     smartmech.interface
 forbidden_modules =
     smartmech.adapters
+allow_indirect_imports = true

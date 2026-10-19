@@ -1,0 +1,4 @@
+# serializer version: 1
+# name: test_ffmpeg_filtergraph_command_snapshot
+  "ffmpeg -y -hide_banner -loglevel error -i clips/clip_0.mp4 -i clips/clip_1.mp4 -i clips/clip_2.mp4 -i clips/clip_3.mp4 -i clips/clip_4.mp4 -i audio/voiceover.wav -filter_complex [0:v]trim=start=0:end=6.125,setpts=PTS-STARTPTS[v0]; [1:v]trim=start=0:end=6.125,setpts=PTS-STARTPTS[v1]; [2:v]trim=start=0:end=6.125,setpts=PTS-STARTPTS[v2]; [3:v]trim=start=0:end=6.125,setpts=PTS-STARTPTS[v3]; [4:v]trim=start=0:end=6.125,setpts=PTS-STARTPTS[v4]; [v0][v1][v2][v3][v4]concat=n=5:v=1:a=0[vconcat]; [vconcat]ass='subtitles/captions.ass'[vout]; [5:a]loudnorm=I=-14.0:LRA=7:tp=-1.5[aout] -map [vout] -map [aout] -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -movflags +faststart output/final.mp4"
+# ---

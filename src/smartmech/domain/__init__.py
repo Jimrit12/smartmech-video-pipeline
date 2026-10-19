@@ -17,6 +17,7 @@ from smartmech.domain.concept import (
     SiteBible,
     Transition,
 )
+from smartmech.domain.filtergraph import FiltergraphSpec
 from smartmech.domain.qc import (
     GateEvaluation,
     QCGateStatus,
@@ -34,6 +35,7 @@ __all__ = [
     "ChainStrategy",
     "Concept",
     "CostRecord",
+    "FiltergraphSpec",
     "GateEvaluation",
     "Keyframe",
     "Plan",
