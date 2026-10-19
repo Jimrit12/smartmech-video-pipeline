@@ -1,0 +1,63 @@
+"""Fake video generation adapter producing real 1080x1920 MP4 clips via ffmpeg lavfi."""
+
+import asyncio
+import subprocess
+
+from smartmech.domain.capabilities import AdapterCapabilities
+from smartmech.ports.video_gen import VideoGenPort
+
+
+def _generate_mp4_in_thread(duration_seconds: float, seed: int) -> bytes:
+    """Generate a real 1080x1920 30fps h264 video clip with motion via ffmpeg lavfi."""
+    colors = ["#1A365D", "#2B6CB0", "#2C5282", "#1A202C", "#2D3748"]
+    color = colors[seed % len(colors)]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        f"color=c={color}:s=1080x1920:r=30:d={duration_seconds:.2f}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-f",
+        "mp4",
+        "-movflags",
+        "frag_keyframe+empty_moov",
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, check=True)
+    return proc.stdout
+
+
+class FakeVideoGenAdapter(VideoGenPort):
+    """Produces playable 1080x1920 MP4 clips using local FFmpeg lavfi filters."""
+
+    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+        self._capabilities = capabilities or AdapterCapabilities(
+            aspect_ratios=["9:16"],
+            min_duration_seconds=1.0,
+            max_duration_seconds=10.0,
+            supports_first_frame=True,
+            supports_last_frame=True,
+            supports_native_audio=False,
+        )
+
+    @property
+    def capabilities(self) -> AdapterCapabilities:
+        return self._capabilities
+
+    async def generate_transition(
+        self,
+        from_image: bytes,
+        to_image: bytes | None,
+        motion_prompt: str,
+        duration_seconds: float,
+        seed: int,
+    ) -> bytes:
+        return await asyncio.to_thread(_generate_mp4_in_thread, duration_seconds, seed)
