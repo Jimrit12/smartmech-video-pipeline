@@ -1,5 +1,6 @@
 """Domain layer: pure entities, value objects, schemas, invariants."""
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.artifact import (
     ProvenanceManifest,
     compute_artifact_key,
@@ -29,6 +30,7 @@ from smartmech.domain.strategy import ChainStrategy, TailTrimPolicy
 
 __all__ = [
     "AdapterCapabilities",
+    "AdapterIdentity",
     "AutonomyLevel",
     "BudgetConfig",
     "BudgetExceededError",

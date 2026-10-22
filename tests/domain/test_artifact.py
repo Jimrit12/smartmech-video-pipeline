@@ -54,3 +54,51 @@ def test_provenance_manifest_creation() -> None:
         file_extension="png",
     )
     assert manifest.artifact_key == "a" * 64
+
+
+def test_clip_key_depends_on_parent_keyframes_and_invalidates() -> None:
+    kf0_key = "0" * 64
+    kf1_key = "1" * 64
+    kf1_alt_key = "2" * 64
+
+    # Baseline clip key with kf0 and kf1
+    clip_key1 = compute_artifact_key(
+        port="video_gen",
+        adapter="vendor_x",
+        model_or_version="gen-2",
+        canonical_input="Smooth crane rise",
+        seed=10,
+        input_artifact_keys=[kf0_key, kf1_key],
+    )
+    # Identical inputs produce identical key (cache hit)
+    clip_key2 = compute_artifact_key(
+        port="video_gen",
+        adapter="vendor_x",
+        model_or_version="gen-2",
+        canonical_input="Smooth crane rise",
+        seed=10,
+        input_artifact_keys=[kf0_key, kf1_key],
+    )
+    assert clip_key1 == clip_key2
+
+    # Changing a keyframe invalidates the clip key
+    clip_key_invalidated = compute_artifact_key(
+        port="video_gen",
+        adapter="vendor_x",
+        model_or_version="gen-2",
+        canonical_input="Smooth crane rise",
+        seed=10,
+        input_artifact_keys=[kf0_key, kf1_alt_key],
+    )
+    assert clip_key_invalidated != clip_key1
+
+    # Key depends on adapter identity: changing model/version invalidates key
+    clip_key_new_model = compute_artifact_key(
+        port="video_gen",
+        adapter="vendor_x",
+        model_or_version="gen-3",
+        canonical_input="Smooth crane rise",
+        seed=10,
+        input_artifact_keys=[kf0_key, kf1_key],
+    )
+    assert clip_key_new_model != clip_key1

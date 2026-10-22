@@ -2,6 +2,7 @@
 
 import re
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.capabilities import AdapterCapabilities
 from smartmech.domain.captions import WordTimestamp
 from smartmech.ports.aligner import AlignerPort
@@ -10,7 +11,11 @@ from smartmech.ports.aligner import AlignerPort
 class FakeAlignerAdapter(AlignerPort):
     """Produces deterministic word timestamps evenly paced across audio duration."""
 
-    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+    def __init__(
+        self,
+        capabilities: AdapterCapabilities | None = None,
+        identity: AdapterIdentity | None = None,
+    ) -> None:
         self._capabilities = capabilities or AdapterCapabilities(
             aspect_ratios=["9:16"],
             min_duration_seconds=5.0,
@@ -19,6 +24,20 @@ class FakeAlignerAdapter(AlignerPort):
             supports_last_frame=False,
             supports_native_audio=True,
         )
+        self._identity = identity or AdapterIdentity(
+            port="aligner",
+            adapter_name="fake_aligner",
+            model_or_version="stub_v1",
+            cost_estimate_per_call=0.0,
+        )
+
+    @property
+    def identity(self) -> AdapterIdentity:
+        return self._identity
+
+    @property
+    def cost_estimate_per_call(self) -> float:
+        return self._identity.cost_estimate_per_call
 
     @property
     def capabilities(self) -> AdapterCapabilities:

@@ -1,5 +1,6 @@
 """Fake planner adapter generating valid deterministic construction timelapse plans."""
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.capabilities import AdapterCapabilities
 from smartmech.domain.concept import (
     Concept,
@@ -16,7 +17,11 @@ from smartmech.ports.planner import PlannerPort
 class FakePlannerAdapter(PlannerPort):
     """Generates synthetic, deterministic plans satisfying all domain invariants."""
 
-    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+    def __init__(
+        self,
+        capabilities: AdapterCapabilities | None = None,
+        identity: AdapterIdentity | None = None,
+    ) -> None:
         self._capabilities = capabilities or AdapterCapabilities(
             aspect_ratios=["9:16"],
             min_duration_seconds=30.0,
@@ -25,6 +30,20 @@ class FakePlannerAdapter(PlannerPort):
             supports_last_frame=True,
             supports_native_audio=False,
         )
+        self._identity = identity or AdapterIdentity(
+            port="planner",
+            adapter_name="fake_planner",
+            model_or_version="stub_v1",
+            cost_estimate_per_call=0.0,
+        )
+
+    @property
+    def identity(self) -> AdapterIdentity:
+        return self._identity
+
+    @property
+    def cost_estimate_per_call(self) -> float:
+        return self._identity.cost_estimate_per_call
 
     @property
     def capabilities(self) -> AdapterCapabilities:

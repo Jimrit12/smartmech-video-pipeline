@@ -3,6 +3,7 @@
 import asyncio
 import subprocess
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.capabilities import AdapterCapabilities
 from smartmech.ports.speech import SpeechPort
 
@@ -42,7 +43,11 @@ def _generate_wav_in_thread(text: str) -> bytes:
 class FakeSpeechAdapter(SpeechPort):
     """Produces playable WAV voiceover audio using local FFmpeg lavfi filters."""
 
-    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+    def __init__(
+        self,
+        capabilities: AdapterCapabilities | None = None,
+        identity: AdapterIdentity | None = None,
+    ) -> None:
         self._capabilities = capabilities or AdapterCapabilities(
             aspect_ratios=["9:16"],
             min_duration_seconds=10.0,
@@ -51,6 +56,20 @@ class FakeSpeechAdapter(SpeechPort):
             supports_last_frame=False,
             supports_native_audio=True,
         )
+        self._identity = identity or AdapterIdentity(
+            port="speech",
+            adapter_name="fake_speech",
+            model_or_version="lavfi_v1",
+            cost_estimate_per_call=0.20,
+        )
+
+    @property
+    def identity(self) -> AdapterIdentity:
+        return self._identity
+
+    @property
+    def cost_estimate_per_call(self) -> float:
+        return self._identity.cost_estimate_per_call
 
     @property
     def capabilities(self) -> AdapterCapabilities:

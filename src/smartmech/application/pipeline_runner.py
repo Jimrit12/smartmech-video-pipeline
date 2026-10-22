@@ -107,10 +107,22 @@ class PipelineRunner:
     async def step_plan(run_id: str, prompt: str, seed: int) -> str:
         """Stage 1 DBOS Step: Plan generation."""
         runner = PipelineRunner._get_runner(run_id)
+        adapter_id = runner.planner.identity
+        cost = runner.planner.cost_estimate_per_call
+        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
         with tracer.start_as_current_span("stage_plan"):
             logger.info("stage_plan_started", run_id=run_id)
             plan = await runner.planner.plan(prompt, seed)
             runner.variation_memory.check_and_record(plan.concept)
+            await runner.budget_guard.record_spend(
+                CostRecord(
+                    port=adapter_id.port,
+                    adapter=adapter_id.adapter_name,
+                    operation="plan",
+                    cost_units=cost,
+                    run_id=run_id,
+                )
+            )
             logger.info("stage_plan_completed", run_id=run_id, title=plan.concept.title)
             return str(plan.model_dump_json())
 
@@ -126,30 +138,38 @@ class PipelineRunner:
         """Stage 2 DBOS Step: Keyframe image generation (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
         site_bible = SiteBible.model_validate_json(site_bible_json)
-        key = compute_artifact_key("image_gen", "fake", "v1", kf_prompt, seed + kf_index)
+        adapter_id = runner.image_gen.identity
+        cost = runner.image_gen.cost_estimate_per_call
+        key = compute_artifact_key(
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
+            canonical_input=kf_prompt,
+            seed=seed + kf_index,
+        )
         if await runner.artifact_store.exists(key):
             logger.info("keyframe_cache_hit", keyframe_idx=kf_index, key=key)
             return key
 
-        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=0.1)
+        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
         img_bytes = await runner.image_gen.generate_image(kf_prompt, site_bible, seed + kf_index)
         manifest = ProvenanceManifest(
             artifact_key=key,
             run_id=run_id,
-            port="image_gen",
-            adapter="fake",
-            model_or_version="v1",
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
             seed=seed + kf_index,
-            cost_units=0.1,
+            cost_units=cost,
             file_extension="png",
         )
         await runner.artifact_store.put(key, img_bytes, manifest)
         await runner.budget_guard.record_spend(
             CostRecord(
-                port="image_gen",
-                adapter="fake",
+                port=adapter_id.port,
+                adapter=adapter_id.adapter_name,
                 operation="generate_image",
-                cost_units=0.1,
+                cost_units=cost,
                 run_id=run_id,
             )
         )
@@ -168,7 +188,20 @@ class PipelineRunner:
     ) -> str:
         """Stage 3 DBOS Step: Transition clip generation (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
-        key = compute_artifact_key("video_gen", "fake", "v1", motion_prompt, seed + tr_index)
+        adapter_id = runner.video_gen.identity
+        cost = runner.video_gen.cost_estimate_per_call
+        input_keys = [from_kf_key]
+        if to_kf_key:
+            input_keys.append(to_kf_key)
+
+        key = compute_artifact_key(
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
+            canonical_input=motion_prompt,
+            seed=seed + tr_index,
+            input_artifact_keys=input_keys,
+        )
         if await runner.artifact_store.exists(key):
             logger.info("clip_cache_hit", transition_idx=tr_index, key=key)
             return key
@@ -178,7 +211,7 @@ class PipelineRunner:
         if to_kf_key:
             to_img, _ = await runner.artifact_store.get(to_kf_key)
 
-        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=0.5)
+        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
         vid_bytes = await runner.video_gen.generate_transition(
             from_image=from_img,
             to_image=to_img,
@@ -189,20 +222,20 @@ class PipelineRunner:
         manifest = ProvenanceManifest(
             artifact_key=key,
             run_id=run_id,
-            port="video_gen",
-            adapter="fake",
-            model_or_version="v1",
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
             seed=seed + tr_index,
-            cost_units=0.5,
+            cost_units=cost,
             file_extension="mp4",
         )
         await runner.artifact_store.put(key, vid_bytes, manifest)
         await runner.budget_guard.record_spend(
             CostRecord(
-                port="video_gen",
-                adapter="fake",
+                port=adapter_id.port,
+                adapter=adapter_id.adapter_name,
                 operation="generate_transition",
-                cost_units=0.5,
+                cost_units=cost,
                 run_id=run_id,
             )
         )
@@ -217,30 +250,38 @@ class PipelineRunner:
     ) -> str:
         """Stage 4 DBOS Step: Voiceover speech synthesis (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
-        speech_key = compute_artifact_key("speech", "fake", "v1", script_text, seed)
+        adapter_id = runner.speech.identity
+        cost = runner.speech.cost_estimate_per_call
+        speech_key = compute_artifact_key(
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
+            canonical_input=script_text,
+            seed=seed,
+        )
         if await runner.artifact_store.exists(speech_key):
             logger.info("speech_cache_hit", key=speech_key)
             return speech_key
 
-        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=0.2)
+        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
         audio_bytes = await runner.speech.generate_speech(script_text)
         manifest = ProvenanceManifest(
             artifact_key=speech_key,
             run_id=run_id,
-            port="speech",
-            adapter="fake",
-            model_or_version="v1",
+            port=adapter_id.port,
+            adapter=adapter_id.adapter_name,
+            model_or_version=adapter_id.model_or_version,
             seed=seed,
-            cost_units=0.2,
+            cost_units=cost,
             file_extension="wav",
         )
         await runner.artifact_store.put(speech_key, audio_bytes, manifest)
         await runner.budget_guard.record_spend(
             CostRecord(
-                port="speech",
-                adapter="fake",
+                port=adapter_id.port,
+                adapter=adapter_id.adapter_name,
                 operation="generate_speech",
-                cost_units=0.2,
+                cost_units=cost,
                 run_id=run_id,
             )
         )
@@ -256,8 +297,20 @@ class PipelineRunner:
     ) -> str:
         """Stage 5 DBOS Step: Forced alignment and ASS caption generation (returns ass path)."""
         runner = PipelineRunner._get_runner(run_id)
+        adapter_id = runner.aligner.identity
+        cost = runner.aligner.cost_estimate_per_call
+        await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
         audio_bytes, _ = await runner.artifact_store.get(speech_key)
         timestamps = await runner.aligner.align(audio_bytes, script_text)
+        await runner.budget_guard.record_spend(
+            CostRecord(
+                port=adapter_id.port,
+                adapter=adapter_id.adapter_name,
+                operation="align",
+                cost_units=cost,
+                run_id=run_id,
+            )
+        )
         ass_content = generate_ass_content(
             timestamps,
             play_res_x=1080,
@@ -326,14 +379,26 @@ class PipelineRunner:
     ) -> str:
         """Stage 8 DBOS Step: Publish / human approval gate (returns status string)."""
         runner = PipelineRunner._get_runner(run_id)
+        adapter_id = runner.publisher.identity
+        cost = runner.publisher.cost_estimate_per_call
         publish_result = "PENDING_APPROVAL"
         if autonomy_level_str == AutonomyLevel.L2_AUTO_PUBLISH.value and qc_status_str == "PASS":
             logger.info("auto_publishing", run_id=run_id)
+            await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
             pub_meta = PublishMetadata(
                 title=plan_title,
                 description=f"{plan_premise}\n\n#Shorts #Construction #Timelapse",
             )
             publish_result = await runner.publisher.publish(final_video_path_str, pub_meta)
+            await runner.budget_guard.record_spend(
+                CostRecord(
+                    port=adapter_id.port,
+                    adapter=adapter_id.adapter_name,
+                    operation="publish",
+                    cost_units=cost,
+                    run_id=run_id,
+                )
+            )
         else:
             logger.info("human_approval_gate_held", level=autonomy_level_str)
         return publish_result

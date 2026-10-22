@@ -3,6 +3,7 @@
 import asyncio
 from pathlib import Path
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.artifact import ProvenanceManifest
 from smartmech.domain.autonomy import PublishMetadata
 from smartmech.domain.budget import CostRecord
@@ -22,6 +23,8 @@ async def verify_planner_contract(planner: PlannerPort) -> None:
     """Verify any PlannerPort implementation satisfies the planner contract."""
     caps = planner.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(planner.identity, AdapterIdentity)
+    assert planner.cost_estimate_per_call >= 0.0
 
     plan = await planner.plan(prompt="Constructing a 50-story commercial tower", seed=42)
     assert len(plan.shot_list.keyframes) == 6
@@ -34,6 +37,8 @@ async def verify_image_gen_contract(image_gen: ImageGenPort) -> None:
     """Verify any ImageGenPort implementation satisfies the image generator contract."""
     caps = image_gen.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(image_gen.identity, AdapterIdentity)
+    assert image_gen.cost_estimate_per_call >= 0.0
     assert "9:16" in caps.aspect_ratios
 
     bible = SiteBible(
@@ -57,6 +62,8 @@ async def verify_video_gen_contract(video_gen: VideoGenPort) -> None:
     """Verify any VideoGenPort implementation satisfies the video generator contract."""
     caps = video_gen.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(video_gen.identity, AdapterIdentity)
+    assert video_gen.cost_estimate_per_call >= 0.0
     assert "9:16" in caps.aspect_ratios
 
     dummy_frame = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
@@ -75,6 +82,8 @@ async def verify_speech_contract(speech: SpeechPort) -> None:
     """Verify any SpeechPort implementation satisfies the speech generator contract."""
     caps = speech.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(speech.identity, AdapterIdentity)
+    assert speech.cost_estimate_per_call >= 0.0
 
     audio_bytes = await speech.generate_speech(
         text="Thirty seconds of construction timelapse voiceover narrative."
@@ -87,6 +96,8 @@ async def verify_aligner_contract(aligner: AlignerPort) -> None:
     """Verify any AlignerPort implementation satisfies the forced-aligner contract."""
     caps = aligner.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(aligner.identity, AdapterIdentity)
+    assert aligner.cost_estimate_per_call >= 0.0
 
     transcript = "Constructing fifty stories with millimeter precision."
     timestamps = await aligner.align(audio_bytes=b"RIFF\x00\x00\x00\x00WAVE", transcript=transcript)
@@ -101,6 +112,8 @@ async def verify_publisher_contract(publisher: PublisherPort) -> None:
     """Verify any PublisherPort implementation satisfies the publisher contract."""
     caps = publisher.capabilities
     assert isinstance(caps, AdapterCapabilities)
+    assert isinstance(publisher.identity, AdapterIdentity)
+    assert publisher.cost_estimate_per_call >= 0.0
 
     metadata = PublishMetadata(
         title="Tower Rise #1",

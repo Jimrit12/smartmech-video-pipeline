@@ -3,6 +3,7 @@
 import asyncio
 import subprocess
 
+from smartmech.domain.adapter_identity import AdapterIdentity
 from smartmech.domain.capabilities import AdapterCapabilities
 from smartmech.ports.video_gen import VideoGenPort
 
@@ -37,7 +38,11 @@ def _generate_mp4_in_thread(duration_seconds: float, seed: int) -> bytes:
 class FakeVideoGenAdapter(VideoGenPort):
     """Produces playable 1080x1920 MP4 clips using local FFmpeg lavfi filters."""
 
-    def __init__(self, capabilities: AdapterCapabilities | None = None) -> None:
+    def __init__(
+        self,
+        capabilities: AdapterCapabilities | None = None,
+        identity: AdapterIdentity | None = None,
+    ) -> None:
         self._capabilities = capabilities or AdapterCapabilities(
             aspect_ratios=["9:16"],
             min_duration_seconds=1.0,
@@ -46,6 +51,20 @@ class FakeVideoGenAdapter(VideoGenPort):
             supports_last_frame=True,
             supports_native_audio=False,
         )
+        self._identity = identity or AdapterIdentity(
+            port="video_gen",
+            adapter_name="fake_video_gen",
+            model_or_version="lavfi_v1",
+            cost_estimate_per_call=0.50,
+        )
+
+    @property
+    def identity(self) -> AdapterIdentity:
+        return self._identity
+
+    @property
+    def cost_estimate_per_call(self) -> float:
+        return self._identity.cost_estimate_per_call
 
     @property
     def capabilities(self) -> AdapterCapabilities:
