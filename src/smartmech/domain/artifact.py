@@ -28,10 +28,15 @@ def compute_artifact_key(
     model_or_version: str,
     canonical_input: Any,
     seed: int,
+    input_artifact_keys: list[str] | None = None,
 ) -> str:
-    """Compute content-addressed key = hash(port, adapter, model/version, canonical input, seed)."""
+    """Compute content-addressed key = hash(port, adapter, model/version, canonical input, seed, input_keys)."""
     input_hash = compute_canonical_input_hash(canonical_input)
-    components = f"{port}|{adapter}|{model_or_version}|{input_hash}|{seed}"
+    if input_artifact_keys:
+        parents_str = "|".join(sorted(input_artifact_keys))
+        components = f"{port}|{adapter}|{model_or_version}|{input_hash}|{seed}|{parents_str}"
+    else:
+        components = f"{port}|{adapter}|{model_or_version}|{input_hash}|{seed}"
     return hashlib.sha256(components.encode("utf-8")).hexdigest()
 
 

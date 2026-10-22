@@ -1,6 +1,7 @@
 """Application layer: use-cases, workflows, and domain policies."""
 
 from smartmech.application.budget_guard import BudgetGuard
+from smartmech.application.compositor import Compositor, CompositorError
 from smartmech.application.negotiation import (
     AdapterCandidate,
     CapabilityMismatchError,
@@ -19,6 +20,8 @@ __all__ = [
     "CapabilityMismatchError",
     "CircuitBreaker",
     "CircuitBreakerOpenError",
+    "Compositor",
+    "CompositorError",
     "ConceptTooSimilarError",
     "FallbackChain",
     "VariationMemory",

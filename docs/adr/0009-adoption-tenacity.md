@@ -22,3 +22,9 @@ Verified in [`tests/spikes/test_tenacity_spike.py`](file:///C:/Users/SHRIT-12/pr
 
 ## Fallback Strategy
 Custom decorator with exponential backoff algorithm.
+
+## Production Implementation
+Wired into `smartmech.application.negotiation.AdapterCandidate`:
+- Operations are executed via `AsyncRetrying(retry=retry_if_exception(is_transient_error), stop=stop_after_attempt(max_retries), wait=wait_exponential(...), reraise=True)`.
+- Explicit predicate `is_transient_error` retries transient 5xx, rate limits, timeouts, while `ContentPolicyRefusalError` (and safety moderation errors) fail immediately on attempt 1 with zero retries.
+

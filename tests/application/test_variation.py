@@ -7,7 +7,7 @@ from smartmech.domain.concept import Concept
 
 
 def test_variation_memory_allows_novel_concepts() -> None:
-    vm = VariationMemory(window_size=3, max_similarity_threshold=0.60)
+    vm = VariationMemory(db_path=":memory:", window_size=3, max_similarity_threshold=0.60)
     c1 = Concept(
         title="Skyscraper Alpha",
         premise="Building a gleaming skyscraper in Tokyo with modular cranes.",
@@ -25,7 +25,7 @@ def test_variation_memory_allows_novel_concepts() -> None:
 
 
 def test_variation_memory_rejects_overly_similar_concept() -> None:
-    vm = VariationMemory(window_size=3, max_similarity_threshold=0.70)
+    vm = VariationMemory(db_path=":memory:", window_size=3, max_similarity_threshold=0.70)
     c1 = Concept(
         title="The Skyscraper Build",
         premise="Witness the construction of a gleaming steel and glass modular tower.",
@@ -44,7 +44,7 @@ def test_variation_memory_rejects_overly_similar_concept() -> None:
 
 
 def test_variation_memory_window_eviction() -> None:
-    vm = VariationMemory(window_size=2)
+    vm = VariationMemory(db_path=":memory:", window_size=2)
     unique_data = [
         (
             "Excavation Pit",

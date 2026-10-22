@@ -21,3 +21,9 @@ Verified in [`tests/spikes/test_aiolimiter_spike.py`](file:///C:/Users/SHRIT-12/
 
 ## Fallback Strategy
 Custom token bucket implementation using `asyncio.sleep` and monotonic clocks.
+
+## Production Implementation
+Wired into `smartmech.application.negotiation.AdapterCandidate`:
+- Each candidate maintains an `AsyncLimiter` configured with `capabilities.requests_per_minute` over a 60.0s time period.
+- Operations are executed inside `async with self.rate_limiter:` in tandem with `async with self.semaphore:` bounded by `capabilities.max_concurrent_requests`.
+

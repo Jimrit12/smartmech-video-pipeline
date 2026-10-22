@@ -12,6 +12,7 @@ from smartmech.adapters.fake_speech import FakeSpeechAdapter
 from smartmech.adapters.fake_video_gen import FakeVideoGenAdapter
 from smartmech.adapters.local_artifact_store import LocalArtifactStoreAdapter
 from smartmech.adapters.memory_cost_ledger import MemoryCostLedgerAdapter
+from smartmech.adapters.sqlite_cost_ledger import SQLiteCostLedgerAdapter
 from tests.adapters.contract_suite import (
     verify_aligner_contract,
     verify_artifact_store_contract,
@@ -69,4 +70,10 @@ async def test_artifact_store_adapter_contract(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_cost_ledger_adapter_contract() -> None:
     adapter = MemoryCostLedgerAdapter()
+    await verify_cost_ledger_contract(adapter)
+
+
+@pytest.mark.asyncio
+async def test_sqlite_cost_ledger_adapter_contract(tmp_path: Path) -> None:
+    adapter = SQLiteCostLedgerAdapter(db_path=tmp_path / "test_ledger.db")
     await verify_cost_ledger_contract(adapter)

@@ -30,8 +30,25 @@ class BudgetConfig(BaseModel):
 class BudgetExceededError(Exception):
     """Raised when an operation would exceed either the per-run or per-day budget cap."""
 
-    def __init__(self, message: str, run_id: str, current_spend: float, limit: float) -> None:
+    def __init__(
+        self,
+        message: str = "Budget exceeded",
+        run_id: str = "",
+        current_spend: float = 0.0,
+        limit: float = 0.0,
+    ) -> None:
         super().__init__(message)
         self.run_id = run_id
         self.current_spend = current_spend
         self.limit = limit
+
+    def __reduce__(self) -> tuple[type, tuple[str, str, float, float]]:
+        return (
+            BudgetExceededError,
+            (
+                str(self.args[0]) if self.args else "Budget exceeded",
+                self.run_id,
+                self.current_spend,
+                self.limit,
+            ),
+        )

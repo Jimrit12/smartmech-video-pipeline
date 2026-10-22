@@ -4,13 +4,14 @@ title = "Smartmech Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-description = "Global allowlists for harmless documentation and test references"
+description = "Specific allowlists for harmless template references and verified test fingerprints"
 paths = [
-    '''\.env\.example$''',
-    '''docs/.*''',
-    '''tests/.*'''
+    '''\.env\.example$'''
 ]
 regexes = [
     '''your_.*_key_here''',
     '''dummy_.*'''
+]
+fingerprints = [
+    # Explicit fingerprints allowlisted on a per-finding basis only
 ]
