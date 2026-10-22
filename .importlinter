@@ -64,3 +64,18 @@ source_modules =
 forbidden_modules =
     smartmech.adapters
 allow_indirect_imports = true
+
+[importlinter:contract:adapters-never-import-each-other]
+name = Adapters Never Import Each Other
+type = independence
+modules =
+    smartmech.adapters.fake_planner
+    smartmech.adapters.fake_image_gen
+    smartmech.adapters.fake_video_gen
+    smartmech.adapters.fake_speech
+    smartmech.adapters.fake_aligner
+    smartmech.adapters.fake_publisher
+    smartmech.adapters.local_artifact_store
+    smartmech.adapters.sqlite_cost_ledger
+    smartmech.adapters.memory_cost_ledger
+

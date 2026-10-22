@@ -93,7 +93,7 @@ known-first-party = ["smartmech"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-packages = ["smartmech"]
+files = ["src", "tests"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
