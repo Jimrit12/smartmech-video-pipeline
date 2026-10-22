@@ -3,7 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import structlog
 from dbos import DBOS, DBOSConfig, SetWorkflowID
@@ -45,6 +45,8 @@ def _write_json_in_thread(path: Path, data: dict[str, Any]) -> None:
 
 class PipelineRunner:
     """Orchestrates the 8-stage pipeline using DBOS steps and port adapters."""
+
+    _active_runners: ClassVar[dict[str, "PipelineRunner"]] = {}
 
     def __init__(
         self,
@@ -89,14 +91,22 @@ class PipelineRunner:
             "enable_otlp": False,
         }
 
+    @classmethod
+    def _get_runner(cls, run_id: str) -> "PipelineRunner":
+        runner = cls._active_runners.get(run_id)
+        if runner is None:
+            raise RuntimeError(f"No active PipelineRunner registered for run_id: {run_id}")
+        return runner
+
     # =========================================================================
     # DBOS STEPS: Each stage returns small serializable values, never raw bytes
     # =========================================================================
 
     @staticmethod
     @DBOS.step()
-    async def step_plan(runner: "PipelineRunner", run_id: str, prompt: str, seed: int) -> str:
+    async def step_plan(run_id: str, prompt: str, seed: int) -> str:
         """Stage 1 DBOS Step: Plan generation."""
+        runner = PipelineRunner._get_runner(run_id)
         with tracer.start_as_current_span("stage_plan"):
             logger.info("stage_plan_started", run_id=run_id)
             plan = await runner.planner.plan(prompt, seed)
@@ -107,7 +117,6 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_keyframe(
-        runner: "PipelineRunner",
         run_id: str,
         kf_prompt: str,
         site_bible_json: str,
@@ -115,6 +124,7 @@ class PipelineRunner:
         kf_index: int,
     ) -> str:
         """Stage 2 DBOS Step: Keyframe image generation (returns artifact key)."""
+        runner = PipelineRunner._get_runner(run_id)
         site_bible = SiteBible.model_validate_json(site_bible_json)
         key = compute_artifact_key("image_gen", "fake", "v1", kf_prompt, seed + kf_index)
         if await runner.artifact_store.exists(key):
@@ -148,7 +158,6 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_clip(
-        runner: "PipelineRunner",
         run_id: str,
         motion_prompt: str,
         duration_seconds: float,
@@ -158,6 +167,7 @@ class PipelineRunner:
         to_kf_key: str | None,
     ) -> str:
         """Stage 3 DBOS Step: Transition clip generation (returns artifact key)."""
+        runner = PipelineRunner._get_runner(run_id)
         key = compute_artifact_key("video_gen", "fake", "v1", motion_prompt, seed + tr_index)
         if await runner.artifact_store.exists(key):
             logger.info("clip_cache_hit", transition_idx=tr_index, key=key)
@@ -201,12 +211,12 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_speech(
-        runner: "PipelineRunner",
         run_id: str,
         script_text: str,
         seed: int,
     ) -> str:
         """Stage 4 DBOS Step: Voiceover speech synthesis (returns artifact key)."""
+        runner = PipelineRunner._get_runner(run_id)
         speech_key = compute_artifact_key("speech", "fake", "v1", script_text, seed)
         if await runner.artifact_store.exists(speech_key):
             logger.info("speech_cache_hit", key=speech_key)
@@ -239,13 +249,13 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_alignment(
-        runner: "PipelineRunner",
         run_id: str,
         speech_key: str,
         script_text: str,
         run_dir_str: str,
     ) -> str:
         """Stage 5 DBOS Step: Forced alignment and ASS caption generation (returns ass path)."""
+        runner = PipelineRunner._get_runner(run_id)
         audio_bytes, _ = await runner.artifact_store.get(speech_key)
         timestamps = await runner.aligner.align(audio_bytes, script_text)
         ass_content = generate_ass_content(
@@ -261,7 +271,6 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_composite(
-        runner: "PipelineRunner",
         run_id: str,
         clip_keys: list[str],
         clip_durations: list[float],
@@ -270,6 +279,7 @@ class PipelineRunner:
         final_video_path_str: str,
     ) -> str:
         """Stage 6 DBOS Step: Composite clips, audio, and captions (returns video path)."""
+        runner = PipelineRunner._get_runner(run_id)
         clip_paths: list[str] = []
         for ck in clip_keys:
             _, manifest = await runner.artifact_store.get(ck)
@@ -295,11 +305,11 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_qc(
-        runner: "PipelineRunner",
         run_id: str,
         final_video_path_str: str,
     ) -> str:
         """Stage 7 DBOS Step: Quality control validation (returns qc_report json)."""
+        runner = PipelineRunner._get_runner(run_id)
         metrics = await runner.compositor.probe(final_video_path_str)
         qc_report = QCReport.evaluate(metrics)
         return str(qc_report.model_dump_json())
@@ -307,7 +317,6 @@ class PipelineRunner:
     @staticmethod
     @DBOS.step()
     async def step_publish_gate(
-        runner: "PipelineRunner",
         run_id: str,
         final_video_path_str: str,
         plan_title: str,
@@ -316,6 +325,7 @@ class PipelineRunner:
         qc_status_str: str,
     ) -> str:
         """Stage 8 DBOS Step: Publish / human approval gate (returns status string)."""
+        runner = PipelineRunner._get_runner(run_id)
         publish_result = "PENDING_APPROVAL"
         if autonomy_level_str == AutonomyLevel.L2_AUTO_PUBLISH.value and qc_status_str == "PASS":
             logger.info("auto_publishing", run_id=run_id)
@@ -335,12 +345,12 @@ class PipelineRunner:
     @staticmethod
     @DBOS.workflow()
     async def _durable_pipeline_workflow(
-        runner: "PipelineRunner",
         run_id: str,
         prompt: str,
         seed: int,
     ) -> dict[str, Any]:
         """Durable workflow orchestrating all 8 stages as discrete steps."""
+        runner = PipelineRunner._get_runner(run_id)
         logger.info("pipeline_started", run_id=run_id, prompt=prompt, seed=seed)
         run_dir = runner.output_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -349,7 +359,7 @@ class PipelineRunner:
             run_span.set_attribute("run_id", run_id)
 
             # Stage 1: Plan
-            plan_json = await PipelineRunner.step_plan(runner, run_id, prompt, seed)
+            plan_json = await PipelineRunner.step_plan(run_id, prompt, seed)
             plan = Plan.model_validate_json(plan_json)
 
             # Stage 2: Keyframes
@@ -358,7 +368,6 @@ class PipelineRunner:
                 logger.info("stage_keyframes_started", run_id=run_id)
                 for kf in plan.shot_list.keyframes:
                     key = await PipelineRunner.step_keyframe(
-                        runner,
                         run_id,
                         kf.prompt,
                         plan.site_bible.model_dump_json(),
@@ -377,7 +386,6 @@ class PipelineRunner:
                     from_kf = keyframe_keys[tr.from_keyframe_idx]
                     to_kf = keyframe_keys[tr.to_keyframe_idx]
                     clip_key = await PipelineRunner.step_clip(
-                        runner,
                         run_id,
                         tr.motion_prompt,
                         tr.duration_seconds,
@@ -391,15 +399,13 @@ class PipelineRunner:
             # Stage 4: Voiceover Speech
             with tracer.start_as_current_span("stage_speech"):
                 logger.info("stage_speech_started", run_id=run_id)
-                speech_key = await PipelineRunner.step_speech(
-                    runner, run_id, plan.script.text, seed
-                )
+                speech_key = await PipelineRunner.step_speech(run_id, plan.script.text, seed)
 
             # Stage 5: Forced Alignment and ASS Captions
             with tracer.start_as_current_span("stage_captions"):
                 logger.info("stage_captions_started", run_id=run_id)
                 ass_path = await PipelineRunner.step_alignment(
-                    runner, run_id, speech_key, plan.script.text, str(run_dir)
+                    run_id, speech_key, plan.script.text, str(run_dir)
                 )
 
             # Stage 6: Compositor
@@ -407,7 +413,6 @@ class PipelineRunner:
             with tracer.start_as_current_span("stage_composite"):
                 logger.info("stage_composite_started", run_id=run_id)
                 await PipelineRunner.step_composite(
-                    runner,
                     run_id,
                     clip_keys,
                     clip_durations,
@@ -420,14 +425,13 @@ class PipelineRunner:
             # Stage 7: Quality Control (QC)
             with tracer.start_as_current_span("stage_qc"):
                 logger.info("stage_qc_started", run_id=run_id)
-                qc_report_json = await PipelineRunner.step_qc(runner, run_id, str(final_video_path))
+                qc_report_json = await PipelineRunner.step_qc(run_id, str(final_video_path))
                 qc_report = QCReport.model_validate_json(qc_report_json)
                 logger.info("stage_qc_completed", status=qc_report.overall_status)
 
             # Stage 8: Publish / Approval Gate
             with tracer.start_as_current_span("stage_publish"):
                 publish_result = await PipelineRunner.step_publish_gate(
-                    runner,
                     run_id,
                     str(final_video_path),
                     plan.concept.title,
@@ -490,10 +494,12 @@ class PipelineRunner:
             managed_dbos = True
         elif not _dbos_mod._dbos_global_instance._launched:
             DBOS.launch()
+        PipelineRunner._active_runners[run_id] = self
         try:
             with SetWorkflowID(run_id):
-                return await self._durable_pipeline_workflow(self, run_id, prompt, seed)
+                return await self._durable_pipeline_workflow(run_id, prompt, seed)
         finally:
+            PipelineRunner._active_runners.pop(run_id, None)
             if managed_dbos:
                 DBOS.destroy()
                 try:
