@@ -46,12 +46,10 @@ def intercept_network_calls() -> Generator[list[dict[str, object]], None, None]:
         attempts.append({"function": "getaddrinfo", "args": args, "kwargs": kwargs})
         raise RealNetworkAttemptError(f"Forbidden socket.getaddrinfo attempted: {args} {kwargs}")
 
-    def safe_socketpair(
-        family: int = socket.AF_INET, type: int = socket.SOCK_STREAM, proto: int = 0
-    ) -> tuple[socket.socket, socket.socket]:
+    def safe_socketpair(*args: object, **kwargs: object) -> tuple[socket.socket, socket.socket]:
         socket.socket.connect = orig_connect  # type: ignore[method-assign]
         try:
-            return orig_socketpair(family, type, proto)
+            return orig_socketpair(*args, **kwargs)  # type: ignore[arg-type]
         finally:
             socket.socket.connect = forbidden_connect  # type: ignore[method-assign]
 
