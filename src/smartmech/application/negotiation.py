@@ -1,8 +1,17 @@
-"""Adapter capabilities negotiation, fallback chains, and circuit breaker."""
+"""Adapter capabilities negotiation, fallback chains, rate limiting, and circuit breaker."""
 
+import asyncio
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
+
+from aiolimiter import AsyncLimiter
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from smartmech.domain.capabilities import AdapterCapabilities
 
@@ -15,6 +24,45 @@ class CapabilityMismatchError(Exception):
 
 class CircuitBreakerOpenError(Exception):
     """Raised when an adapter's circuit is currently open due to excessive failures."""
+
+
+class ContentPolicyRefusalError(Exception):
+    """Raised when a vendor rejects content due to policy/safety violation. Never retried."""
+
+
+class TransientAdapterError(Exception):
+    """Raised on transient vendor failures (5xx, rate limits, timeouts). Retried with backoff."""
+
+
+def is_transient_error(exc: BaseException) -> bool:
+    """Determine if an exception represents a transient, retryable failure."""
+    if isinstance(exc, ContentPolicyRefusalError):
+        return False
+    if isinstance(exc, TransientAdapterError):
+        return True
+    msg = str(exc).lower()
+    # Never retry policy refusals or safety blocks
+    if any(
+        term in msg
+        for term in ["content policy", "safety violation", "prompt refused", "moderation"]
+    ):
+        return False
+    # Retry 5xx, rate limit, timeout, temporary network errors
+    if any(
+        term in msg
+        for term in [
+            "500",
+            "502",
+            "503",
+            "504",
+            "rate limit",
+            "timeout",
+            "temporarily unavailable",
+            "connection reset",
+        ]
+    ):
+        return True
+    return False
 
 
 class CircuitBreaker:
@@ -51,13 +99,42 @@ class CircuitBreaker:
 
 
 class AdapterCandidate:
-    """An adapter instance with its capabilities and attached circuit breaker."""
+    """An adapter instance with its capabilities, circuit breaker, rate limiter, and retry logic."""
 
-    def __init__(self, name: str, adapter: Any, capabilities: AdapterCapabilities) -> None:
+    def __init__(
+        self,
+        name: str,
+        adapter: Any,
+        capabilities: AdapterCapabilities,
+        max_retries: int = 3,
+        retry_multiplier: float = 0.05,
+    ) -> None:
         self.name = name
         self.adapter = adapter
         self.capabilities = capabilities
         self.circuit_breaker = CircuitBreaker()
+        self.semaphore = asyncio.Semaphore(capabilities.max_concurrent_requests)
+        self.rate_limiter = AsyncLimiter(
+            max_rate=capabilities.requests_per_minute,
+            time_period=60.0,
+        )
+        self.max_retries = max_retries
+        self.retry_multiplier = retry_multiplier
+        self.invocation_count = 0
+
+    async def execute(self, operation: Callable[[Any], Any]) -> Any:
+        """Execute an adapter operation bounded by concurrency, rate limits, and tenacity retries."""
+        async with self.semaphore:
+            async with self.rate_limiter:
+                async for attempt in AsyncRetrying(
+                    retry=retry_if_exception(is_transient_error),
+                    stop=stop_after_attempt(self.max_retries),
+                    wait=wait_exponential(multiplier=self.retry_multiplier, min=0.01, max=0.5),
+                    reraise=True,
+                ):
+                    with attempt:
+                        self.invocation_count += 1
+                        return await operation(self.adapter)
 
 
 class FallbackChain:
@@ -119,7 +196,7 @@ class FallbackChain:
                 continue
 
             try:
-                res = await operation(candidate.adapter)
+                res = await candidate.execute(operation)
                 candidate.circuit_breaker.record_success()
                 return res
             except Exception as exc:

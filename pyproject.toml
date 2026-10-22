@@ -120,3 +120,12 @@ source = ["src/smartmech/domain", "src/smartmech/application"]
 [tool.coverage.report]
 fail_under = 90
 show_missing = true
+
+[tool.deptry]
+known_first_party = ["smartmech"]
+optional_dependencies_dev_groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "deptry>=0.25.1",
+]
