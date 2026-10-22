@@ -11,6 +11,7 @@ from opentelemetry import trace
 
 from smartmech.application.budget_guard import BudgetGuard
 from smartmech.application.compositor import Compositor
+from smartmech.application.negotiation import AdapterCandidate, FallbackChain
 from smartmech.application.variation import VariationMemory
 from smartmech.domain.artifact import ProvenanceManifest, compute_artifact_key
 from smartmech.domain.autonomy import AutonomyLevel, PublishMetadata
@@ -19,7 +20,7 @@ from smartmech.domain.captions import generate_ass_content
 from smartmech.domain.concept import Plan, SiteBible
 from smartmech.domain.filtergraph import FiltergraphSpec
 from smartmech.domain.qc import QCReport
-from smartmech.domain.strategy import TailTrimPolicy
+from smartmech.domain.strategy import ChainStrategy, TailTrimPolicy
 from smartmech.ports.aligner import AlignerPort
 from smartmech.ports.artifact_store import ArtifactStorePort
 from smartmech.ports.cost_ledger import CostLedgerPort
@@ -62,7 +63,18 @@ class PipelineRunner:
         dbos_sqlite_path: str | None = None,
         output_directory: str = "output",
         autonomy_level: AutonomyLevel = AutonomyLevel.L1_HUMAN_APPROVAL,
+        chain_strategy: ChainStrategy = ChainStrategy.ANCHOR_PARALLEL,
+        image_gen_chain: FallbackChain | None = None,
+        video_gen_chain: FallbackChain | None = None,
+        speech_chain: FallbackChain | None = None,
     ) -> None:
+        self.chain_strategy = chain_strategy
+        if self.chain_strategy == ChainStrategy.TAIL_HANDOFF:
+            raise ValueError(
+                "TAIL_HANDOFF chaining strategy is deferred in M2 and rejected at configuration time; "
+                "see docs/adr/0012-deferred-tail-handoff-chaining.md"
+            )
+
         self.planner = planner
         self.image_gen = image_gen
         self.video_gen = video_gen
@@ -71,6 +83,20 @@ class PipelineRunner:
         self.publisher = publisher
         self.artifact_store = artifact_store
         self.cost_ledger = cost_ledger
+
+        self.image_gen_chain = image_gen_chain or FallbackChain(
+            "image_gen",
+            [AdapterCandidate(image_gen.identity.adapter_name, image_gen, image_gen.capabilities)],
+        )
+        self.video_gen_chain = video_gen_chain or FallbackChain(
+            "video_gen",
+            [AdapterCandidate(video_gen.identity.adapter_name, video_gen, video_gen.capabilities)],
+        )
+        self.speech_chain = speech_chain or FallbackChain(
+            "speech",
+            [AdapterCandidate(speech.identity.adapter_name, speech, speech.capabilities)],
+        )
+
         self.budget_config = budget_config or BudgetConfig()
         self.budget_guard = BudgetGuard(cost_ledger, self.budget_config)
         self.compositor = Compositor()
@@ -138,8 +164,10 @@ class PipelineRunner:
         """Stage 2 DBOS Step: Keyframe image generation (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
         site_bible = SiteBible.model_validate_json(site_bible_json)
-        adapter_id = runner.image_gen.identity
-        cost = runner.image_gen.cost_estimate_per_call
+        candidate = runner.image_gen_chain.find_capable_candidate(required_aspect_ratio="9:16")
+        adapter = candidate.adapter
+        adapter_id = adapter.identity
+        cost = adapter.cost_estimate_per_call
         key = compute_artifact_key(
             port=adapter_id.port,
             adapter=adapter_id.adapter_name,
@@ -152,7 +180,10 @@ class PipelineRunner:
             return key
 
         await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
-        img_bytes = await runner.image_gen.generate_image(kf_prompt, site_bible, seed + kf_index)
+        img_bytes = await runner.image_gen_chain.execute_with_fallback(
+            lambda a: a.generate_image(kf_prompt, site_bible, seed + kf_index),
+            required_aspect_ratio="9:16",
+        )
         manifest = ProvenanceManifest(
             artifact_key=key,
             run_id=run_id,
@@ -188,10 +219,18 @@ class PipelineRunner:
     ) -> str:
         """Stage 3 DBOS Step: Transition clip generation (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
-        adapter_id = runner.video_gen.identity
-        cost = runner.video_gen.cost_estimate_per_call
+        require_last = runner.chain_strategy == ChainStrategy.FIRST_LAST
+        candidate = runner.video_gen_chain.find_capable_candidate(
+            required_aspect_ratio="9:16",
+            required_duration=duration_seconds,
+            require_last_frame=require_last,
+        )
+        adapter = candidate.adapter
+        adapter_id = adapter.identity
+        cost = adapter.cost_estimate_per_call
+
         input_keys = [from_kf_key]
-        if to_kf_key:
+        if to_kf_key and candidate.capabilities.supports_last_frame:
             input_keys.append(to_kf_key)
 
         key = compute_artifact_key(
@@ -208,16 +247,21 @@ class PipelineRunner:
 
         from_img, _ = await runner.artifact_store.get(from_kf_key)
         to_img = None
-        if to_kf_key:
+        if to_kf_key and candidate.capabilities.supports_last_frame:
             to_img, _ = await runner.artifact_store.get(to_kf_key)
 
         await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
-        vid_bytes = await runner.video_gen.generate_transition(
-            from_image=from_img,
-            to_image=to_img,
-            motion_prompt=motion_prompt,
-            duration_seconds=duration_seconds,
-            seed=seed + tr_index,
+        vid_bytes = await runner.video_gen_chain.execute_with_fallback(
+            lambda a: a.generate_transition(
+                from_image=from_img,
+                to_image=to_img,
+                motion_prompt=motion_prompt,
+                duration_seconds=duration_seconds,
+                seed=seed + tr_index,
+            ),
+            required_aspect_ratio="9:16",
+            required_duration=duration_seconds,
+            require_last_frame=require_last,
         )
         manifest = ProvenanceManifest(
             artifact_key=key,
@@ -250,8 +294,10 @@ class PipelineRunner:
     ) -> str:
         """Stage 4 DBOS Step: Voiceover speech synthesis (returns artifact key)."""
         runner = PipelineRunner._get_runner(run_id)
-        adapter_id = runner.speech.identity
-        cost = runner.speech.cost_estimate_per_call
+        candidate = runner.speech_chain.find_capable_candidate(required_aspect_ratio="9:16")
+        adapter = candidate.adapter
+        adapter_id = adapter.identity
+        cost = adapter.cost_estimate_per_call
         speech_key = compute_artifact_key(
             port=adapter_id.port,
             adapter=adapter_id.adapter_name,
@@ -264,7 +310,10 @@ class PipelineRunner:
             return speech_key
 
         await runner.budget_guard.check_budget_before_call(run_id, estimated_cost=cost)
-        audio_bytes = await runner.speech.generate_speech(script_text)
+        audio_bytes = await runner.speech_chain.execute_with_fallback(
+            lambda a: a.generate_speech(script_text),
+            required_aspect_ratio="9:16",
+        )
         manifest = ProvenanceManifest(
             artifact_key=speech_key,
             run_id=run_id,
