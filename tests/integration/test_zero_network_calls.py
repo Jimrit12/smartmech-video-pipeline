@@ -31,6 +31,8 @@ def intercept_network_calls() -> Generator[list[dict[str, object]], None, None]:
     Every intercepted attempt is recorded into a shared list and raises RealNetworkAttemptError.
     """
     attempts: list[dict[str, object]] = []
+    orig_connect = socket.socket.connect
+    orig_socketpair = socket.socketpair
 
     def forbidden_connect(*args: object, **kwargs: object) -> None:
         attempts.append({"function": "connect", "args": args, "kwargs": kwargs})
@@ -44,10 +46,20 @@ def intercept_network_calls() -> Generator[list[dict[str, object]], None, None]:
         attempts.append({"function": "getaddrinfo", "args": args, "kwargs": kwargs})
         raise RealNetworkAttemptError(f"Forbidden socket.getaddrinfo attempted: {args} {kwargs}")
 
+    def safe_socketpair(
+        family: int = socket.AF_INET, type: int = socket.SOCK_STREAM, proto: int = 0
+    ) -> tuple[socket.socket, socket.socket]:
+        socket.socket.connect = orig_connect  # type: ignore[method-assign]
+        try:
+            return orig_socketpair(family, type, proto)
+        finally:
+            socket.socket.connect = forbidden_connect  # type: ignore[method-assign]
+
     with (
         patch.object(socket.socket, "connect", side_effect=forbidden_connect),
         patch.object(socket.socket, "connect_ex", side_effect=forbidden_connect_ex),
         patch.object(socket, "getaddrinfo", side_effect=forbidden_getaddrinfo),
+        patch.object(socket, "socketpair", side_effect=safe_socketpair),
     ):
         yield attempts
 
@@ -67,6 +79,7 @@ async def test_zero_real_network_calls_during_pipeline(tmp_path: Path) -> None:
         publisher=FakePublisherAdapter(),
         artifact_store=store,
         cost_ledger=ledger,
+        dbos_sqlite_path=str(tmp_path / "offline_dbos.sqlite"),
         output_directory=str(output_dir),
     )
 

@@ -84,3 +84,10 @@ class Compositor:
             raise CompositorError(f"Rendered file does not exist at {spec.output_path}")
 
         return await asyncio.to_thread(_probe_video_in_thread, spec.output_path)
+
+    async def probe(self, video_path: str) -> QCMetrics:
+        """Inspect and measure technical QC metrics from a video file."""
+        exists = await asyncio.to_thread(_check_file_exists_in_thread, video_path)
+        if not exists:
+            raise CompositorError(f"Video file does not exist at {video_path}")
+        return await asyncio.to_thread(_probe_video_in_thread, video_path)
