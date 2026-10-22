@@ -67,6 +67,7 @@ class PipelineRunner:
         image_gen_chain: FallbackChain | None = None,
         video_gen_chain: FallbackChain | None = None,
         speech_chain: FallbackChain | None = None,
+        variation_memory: VariationMemory | None = None,
     ) -> None:
         self.chain_strategy = chain_strategy
         if self.chain_strategy == ChainStrategy.TAIL_HANDOFF:
@@ -100,9 +101,11 @@ class PipelineRunner:
         self.budget_config = budget_config or BudgetConfig()
         self.budget_guard = BudgetGuard(cost_ledger, self.budget_config)
         self.compositor = Compositor()
-        self.variation_memory = VariationMemory()
         self.output_dir = Path(output_directory)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.variation_memory = variation_memory or VariationMemory(
+            db_path=self.output_dir / "smartmech_variation.db"
+        )
         self.autonomy_level = autonomy_level
 
         # Configure DBOS with local SQLite and telemetry disabled

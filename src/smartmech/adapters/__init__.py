@@ -8,6 +8,7 @@ from smartmech.adapters.fake_speech import FakeSpeechAdapter
 from smartmech.adapters.fake_video_gen import FakeVideoGenAdapter
 from smartmech.adapters.local_artifact_store import LocalArtifactStoreAdapter
 from smartmech.adapters.memory_cost_ledger import MemoryCostLedgerAdapter
+from smartmech.adapters.sqlite_cost_ledger import SQLiteCostLedgerAdapter
 
 __all__ = [
     "FakeAlignerAdapter",
@@ -18,4 +19,5 @@ __all__ = [
     "FakeVideoGenAdapter",
     "LocalArtifactStoreAdapter",
     "MemoryCostLedgerAdapter",
+    "SQLiteCostLedgerAdapter",
 ]

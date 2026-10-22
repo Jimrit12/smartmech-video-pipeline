@@ -9,8 +9,9 @@ from smartmech.adapters.fake_publisher import FakePublisherAdapter
 from smartmech.adapters.fake_speech import FakeSpeechAdapter
 from smartmech.adapters.fake_video_gen import FakeVideoGenAdapter
 from smartmech.adapters.local_artifact_store import LocalArtifactStoreAdapter
-from smartmech.adapters.memory_cost_ledger import MemoryCostLedgerAdapter
+from smartmech.adapters.sqlite_cost_ledger import SQLiteCostLedgerAdapter
 from smartmech.application.pipeline_runner import PipelineRunner
+from smartmech.application.variation import VariationMemory
 from smartmech.compose.settings import PipelineSettings
 from smartmech.domain.autonomy import AutonomyLevel
 from smartmech.domain.budget import BudgetConfig
@@ -42,7 +43,18 @@ def build_pipeline(
     aligner = FakeAlignerAdapter()
     publisher = FakePublisherAdapter()
     artifact_store = LocalArtifactStoreAdapter(base_directory=artifacts_dir)
-    cost_ledger = MemoryCostLedgerAdapter()
+    ledger_path = (
+        Path(cfg.ledger_db_path)
+        if Path(cfg.ledger_db_path).is_absolute()
+        else Path(eff_output_dir) / cfg.ledger_db_path
+    )
+    variation_path = (
+        Path(cfg.variation_db_path)
+        if Path(cfg.variation_db_path).is_absolute()
+        else Path(eff_output_dir) / cfg.variation_db_path
+    )
+    cost_ledger = SQLiteCostLedgerAdapter(db_path=ledger_path)
+    variation_memory = VariationMemory(db_path=variation_path)
     budget_config = BudgetConfig(per_run_budget=eff_run_budget, per_day_budget=eff_day_budget)
 
     return PipelineRunner(
@@ -58,4 +70,5 @@ def build_pipeline(
         dbos_sqlite_path=eff_dbos_path,
         output_directory=eff_output_dir,
         autonomy_level=eff_autonomy,
+        variation_memory=variation_memory,
     )

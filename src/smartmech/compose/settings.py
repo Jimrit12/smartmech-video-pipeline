@@ -17,6 +17,8 @@ class PipelineSettings(BaseSettings):
 
     output_dir: str = Field(default="output")
     dbos_sqlite_path: str = Field(default="smartmech_dbos.sqlite")
+    ledger_db_path: str = Field(default="smartmech_ledger.db")
+    variation_db_path: str = Field(default="smartmech_variation.db")
     per_run_budget: float = Field(default=10.0, ge=0.0)
     per_day_budget: float = Field(default=50.0, ge=0.0)
     autonomy_level: AutonomyLevel = Field(default=AutonomyLevel.L1_HUMAN_APPROVAL)
