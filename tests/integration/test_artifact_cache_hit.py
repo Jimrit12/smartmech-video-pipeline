@@ -13,6 +13,7 @@ from smartmech.adapters.fake_video_gen import FakeVideoGenAdapter
 from smartmech.adapters.local_artifact_store import LocalArtifactStoreAdapter
 from smartmech.adapters.memory_cost_ledger import MemoryCostLedgerAdapter
 from smartmech.application.pipeline_runner import PipelineRunner
+from smartmech.application.variation import VariationMemory
 
 
 @pytest.mark.asyncio
@@ -52,6 +53,7 @@ async def test_artifact_cache_hit_across_runs(tmp_path: Path) -> None:
         artifact_store=shared_store,
         cost_ledger=ledger_run2,
         output_directory=str(output_dir),
+        variation_memory=VariationMemory(db_path=":memory:"),
     )
 
     report2 = await runner2.execute_run(run_id="run_fresh_2", prompt="Cache test tower", seed=55)
