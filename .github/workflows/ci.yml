@@ -36,10 +36,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install System Dependencies (FFmpeg)
+      - name: Verify or Install System Dependencies (FFmpeg)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libass-dev
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg libass-dev
+          fi
+          ffmpeg -version
+          ffprobe -version
 
       - name: Install Dependencies
         run: uv sync --locked --all-extras --all-groups
