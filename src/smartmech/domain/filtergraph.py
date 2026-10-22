@@ -22,6 +22,11 @@ class FiltergraphSpec(BaseModel):
     target_height: int = 1920
     target_fps: int = 30
     target_lufs: float = -14.0
+    measured_i: float | None = None
+    measured_tp: float | None = None
+    measured_lra: float | None = None
+    measured_thresh: float | None = None
+    target_offset: float | None = None
 
     def build_command(self) -> list[str]:
         """Build deterministic, single-encode FFmpeg command arguments."""
@@ -60,11 +65,21 @@ class FiltergraphSpec(BaseModel):
         sub_label = "vout"
         filter_chains.append(f"[{concat_label}]ass='{escaped_ass}'[{sub_label}]")
 
-        # 4. Audio EBU R128 loudness normalization
+        # 4. Audio EBU R128 loudness normalization (two-pass if measured stats provided)
         audio_label = "aout"
-        filter_chains.append(
-            f"[{audio_idx}:a]loudnorm=I={self.target_lufs:.1f}:LRA=7:tp=-1.5[{audio_label}]"
-        )
+        if self.measured_i is not None and self.measured_tp is not None:
+            lra = self.measured_lra if self.measured_lra is not None else 7.0
+            thresh = self.measured_thresh if self.measured_thresh is not None else -24.0
+            offset = self.target_offset if self.target_offset is not None else 0.0
+            loudnorm_filter = (
+                f"loudnorm=I={self.target_lufs:.1f}:LRA=7:tp=-1.5:"
+                f"measured_I={self.measured_i:.2f}:measured_TP={self.measured_tp:.2f}:"
+                f"measured_LRA={lra:.2f}:measured_thresh={thresh:.2f}:"
+                f"offset={offset:.2f}:linear=true"
+            )
+        else:
+            loudnorm_filter = f"loudnorm=I={self.target_lufs:.1f}:LRA=7:tp=-1.5"
+        filter_chains.append(f"[{audio_idx}:a]{loudnorm_filter}[{audio_label}]")
 
         filtergraph = "; ".join(filter_chains)
 

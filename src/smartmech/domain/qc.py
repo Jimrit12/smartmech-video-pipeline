@@ -23,12 +23,11 @@ class QCMetrics(BaseModel):
     fps: float = Field(ge=1.0)
     duration_seconds: float = Field(ge=0.0)
     loudness_lufs: float
+    av_duration_delta_seconds: float = Field(default=0.0, ge=0.0)
     av_sync_offset_ms: float = 0.0
     black_frame_count: int = 0
     frozen_frame_count: int = 0
     duplicate_frame_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
-    flicker_score: float = Field(default=0.0, ge=0.0)
-    sharpness_score: float = Field(default=100.0, ge=0.0)
     is_portrait: bool = True
 
 
@@ -195,6 +194,25 @@ class QCReport(BaseModel):
                     name="Orientation",
                     status=QCGateStatus.FAIL,
                     detail="Landscape orientation inside portrait container",
+                )
+            )
+            overall = QCGateStatus.FAIL
+
+        # 8. Audio/Video Duration Delta
+        if metrics.av_duration_delta_seconds <= 1.0:
+            gates.append(
+                GateEvaluation(
+                    name="AudioVideoDelta",
+                    status=QCGateStatus.PASS,
+                    detail=f"{metrics.av_duration_delta_seconds:.3f} s delta <= 1.0 s",
+                )
+            )
+        else:
+            gates.append(
+                GateEvaluation(
+                    name="AudioVideoDelta",
+                    status=QCGateStatus.FAIL,
+                    detail=f"{metrics.av_duration_delta_seconds:.3f} s delta exceeds 1.0 s threshold",
                 )
             )
             overall = QCGateStatus.FAIL

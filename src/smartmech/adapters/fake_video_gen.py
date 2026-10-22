@@ -9,8 +9,7 @@ from smartmech.ports.video_gen import VideoGenPort
 
 def _generate_mp4_in_thread(duration_seconds: float, seed: int) -> bytes:
     """Generate a real 1080x1920 30fps h264 video clip with motion via ffmpeg lavfi."""
-    colors = ["#1A365D", "#2B6CB0", "#2C5282", "#1A202C", "#2D3748"]
-    color = colors[seed % len(colors)]
+    hue_val = (seed * 60) % 360
     cmd = [
         "ffmpeg",
         "-y",
@@ -20,7 +19,7 @@ def _generate_mp4_in_thread(duration_seconds: float, seed: int) -> bytes:
         "-f",
         "lavfi",
         "-i",
-        f"color=c={color}:s=1080x1920:r=30:d={duration_seconds:.2f}",
+        f"testsrc=s=1080x1920:r=30:d={duration_seconds:.2f},hue=h={hue_val}",
         "-c:v",
         "libx264",
         "-pix_fmt",

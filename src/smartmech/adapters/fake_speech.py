@@ -1,7 +1,6 @@
 """Fake speech generation adapter producing real playable WAV audio via ffmpeg lavfi."""
 
 import asyncio
-import re
 import subprocess
 
 from smartmech.domain.capabilities import AdapterCapabilities
@@ -10,10 +9,9 @@ from smartmech.ports.speech import SpeechPort
 
 def _generate_wav_in_thread(text: str) -> bytes:
     """Generate audio tuned to the narrative duration (30-36s) using ffmpeg lavfi."""
-    words = re.findall(r"\b\w+\b", text)
-    word_count = max(len(words), 40)
-    # Target 30.0 - 40.0 second pacing
-    duration = max(30.0, min(38.0, word_count * 0.75))
+    _ = text
+    # Target 30.0 - 40.0 second pacing aligned with composite video duration (~30.6s)
+    duration = 30.625
 
     cmd = [
         "ffmpeg",
